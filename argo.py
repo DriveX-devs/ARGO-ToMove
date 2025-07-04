@@ -11,6 +11,7 @@ from sklearn.cluster import OPTICS
 from statistics import mean
 from bloomfilter_operations import *
 from math import ceil
+import pymysql
 
 
 def bloom_filter_insertion(main_bf, cluster_mac):
@@ -140,6 +141,13 @@ if __name__ == "__main__":
                         help="Clustering method, the possible choices are dbscan and optics.")
     parser.add_argument("--counting_method", type=str, choices=["simple", "advanced"], default="simple",
                         help="Counting method when a cluster is examined, the possible choices are simple and advanced.")
+    parser.add_argument("--enable_db",type=bool, default=True,help="Enable data transmission to the mySQL database.")
+    parser.add_argument("--db_ip", type=str, default="127.0.0.1",help="IP address of the mySQL database server.")
+    parser.add_argument("--db_port", type=int, default=6666, help="Port of the mySQL database server.")
+    parser.add_argument("--db_user", type=str, default="user", help="Username for the mySQL database.")
+    parser.add_argument("--db_password", type=str, default="password", help="Password for the mySQL database.")
+    parser.add_argument("--db_name", type=str, default="db", help="Name of the mySQL database.")
+    parser.add_argument("--db_table", type=str, default="table", help="Name of the table in the mySQL database.")
     opt = vars(parser.parse_args())
 
     file = opt["input_file"]
@@ -153,9 +161,31 @@ if __name__ == "__main__":
     rate_modality = opt["rate_modality"]
     cluster_method = opt["cluster_method"]
     counting_method = opt["counting_method"]
+    enable_db = opt["enable_db"]
+
+    str_timestamp = file.split("Capturing_")[1].split(".pcap")[0]
+    date_format = "%d%m%y_%H%M%S"
+    database_time = datetime.datetime.strptime(str_timestamp, date_format)
 
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger()
+
+    if enable_db:
+        IP_ADDRESS = opt["db_ip"]
+        PORT = opt["db_port"]
+        DB_USER = opt["db_user"]
+        DB_PASSWORD = opt["db_password"]
+        DB_NAME = opt["db_name"]
+        TABLE_NAME = opt["db_table"]
+
+        # Open Database connection
+        try:
+            db = pymysql.connect(host=IP_ADDRESS, port=PORT, user=DB_USER, password=DB_PASSWORD, db=DB_NAME)
+            logger.info("Successfully connected to " + DB_NAME)
+
+        except Exception as e:
+            logger.info("Exeception occured:{}".format(e))
+            exit(-1)
 
     # Read the device-model database
     with open("./models.json", "r") as fr:
@@ -189,6 +219,11 @@ if __name__ == "__main__":
     global_counter = 0
     cluster_counter = 0
 
+    min_pwr = 200
+    max_pwr = -200
+    avg_pwr = 0
+    pwr_pkt_counter = 0
+
     logger.info("Parsing packets")
     quadruplets = {}
     count = {}
@@ -198,6 +233,22 @@ if __name__ == "__main__":
         quadruplets[i] = [-1, -1, -1, -1]
         if packet.dBm_AntSignal <= power_threshold:
             continue
+
+        rx_pwr = packet.dBm_AntSignal
+
+        # Discard positive values that are likely due to a driver bug
+        if rx_pwr <= 0:
+            if rx_pwr < min_pwr:
+                min_pwr = rx_pwr
+
+            if rx_pwr > max_pwr:
+                max_pwr = rx_pwr
+
+            pwr_pkt_counter += 1
+
+            avg_pwr = avg_pwr + (rx_pwr - avg_pwr) / pwr_pkt_counter
+
+        pkt_counter += 1
 
         pkt_counter += 1
         TIME_WINDOW = float(packet.time) - flat_time
@@ -355,3 +406,21 @@ if __name__ == "__main__":
     end_time = datetime.datetime.now().timestamp()
 
     logger.info(f"End counting, total time: {round(end_time - start_time, 2)} seconds")
+
+    if enable_db:
+        try:
+            with db.cursor() as cursor:
+
+                insertStatement = f"INSERT INTO {TABLE_NAME} (timestamp, counting, min_pwr, max_pwr, avg_pwr, global_MACs) VALUES (%s, %s, %s, %s, %s, %s)"
+                cursor.execute(insertStatement,
+                               (database_time, total_devices, min_pwr, max_pwr, avg_pwr, global_unique_counter))
+
+                db.commit()
+
+        except Exception as e:
+            logger.info("Exeception occured:{}".format(e))
+
+        finally:
+            db.close()
+    else:
+        print(f"Timestamp: {database_time}, Total devices: {total_devices}, Min power: {min_pwr}, Max power: {max_pwr}, Avg power: {avg_pwr}, Global MACs: {global_counter}")
