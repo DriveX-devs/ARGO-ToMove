@@ -419,7 +419,7 @@ if __name__ == "__main__":
 
                 insertStatement = f"INSERT INTO {TABLE_NAME} (timestamp, counting, min_pwr, max_pwr, avg_pwr, global_MACs) VALUES (%s, %s, %s, %s, %s, %s)"
                 cursor.execute(insertStatement,
-                               (database_time, total_devices, min_pwr, max_pwr, avg_pwr, global_unique_counter))
+                               (database_time, total_devices, min_pwr, max_pwr, avg_pwr, global_counter))
 
                 db.commit()
 
