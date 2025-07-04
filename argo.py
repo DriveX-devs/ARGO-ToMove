@@ -1,3 +1,9 @@
+"""
+First created on Sat Oct 21 12:25:45 2023
+First edited on Fri Jul 04 15:49:00 2025
+
+@authors: Diego Gasco, Riccardo Rusca, Francesco Raviglione
+"""
 import datetime
 import argparse
 import re
@@ -125,13 +131,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_file", type=str, default="./input.pcap", help="Path for the .pcap trace.")
     parser.add_argument("--max_ratio", type=int, default=100, help="Maximum Ratio for clustering algorithm.")
-    parser.add_argument("--power_threshold", type=int, default=-70, help="Threshold for the capturing power.")
+    parser.add_argument("--power_threshold", type=int, default=-100, help="Threshold for the capturing power.")
     parser.add_argument("--default_counter", type=int, default=1,
                         help="Default number assigned to a cluster if the condition on the Maximum Ratio is not respected.")
-    parser.add_argument("--min_percentage", type=float, default=0.02,
+    parser.add_argument("--min_percentage", type=float, default=0.002,
                         help="Minimum percentage of probe request that must have locally administered MAC address for doing clustering.")
     parser.add_argument("--epsilon", type=float, default=0.001, help="Epsilon parameter for DBSCAN clustering.")
-    parser.add_argument("--min_samples", type=int, default=15, help="Min samples parameter for clustering.")
+    parser.add_argument("--min_samples", type=int, default=4, help="Min samples parameter for clustering.")
     parser.add_argument("--distance_metric", type=str, default="euclidean",
                         help="Metric parameter for clustering.")
     parser.add_argument("--rate_modality", type=str, default="mean_rate",
@@ -141,7 +147,7 @@ if __name__ == "__main__":
                         help="Clustering method, the possible choices are dbscan and optics.")
     parser.add_argument("--counting_method", type=str, choices=["simple", "advanced"], default="simple",
                         help="Counting method when a cluster is examined, the possible choices are simple and advanced.")
-    parser.add_argument("--enable_db",type=bool, default=True,help="Enable data transmission to the mySQL database.")
+    parser.add_argument("--enable_db",type=bool, default=False,help="Enable data transmission to the mySQL database.")
     parser.add_argument("--db_ip", type=str, default="127.0.0.1",help="IP address of the mySQL database server.")
     parser.add_argument("--db_port", type=int, default=6666, help="Port of the mySQL database server.")
     parser.add_argument("--db_user", type=str, default="user", help="Username for the mySQL database.")
@@ -418,7 +424,7 @@ if __name__ == "__main__":
                 db.commit()
 
         except Exception as e:
-            logger.info("Exeception occured:{}".format(e))
+            logger.info("DB INSERT exeception occured:{}".format(e))
 
         finally:
             db.close()
