@@ -328,8 +328,10 @@ if __name__ == "__main__":
 
     cluster_devices = 0
 
-    # Check that at least the 2% of packets have a locally administered MAC address
-    if (pkt_counter - global_counter) > min_percentage * pkt_counter:
+     # Check that at least the 2% of packets have a locally administered MAC address (or skip clustering if all addresses look to be global)
+    if df.empty:
+        logger.info("Clustering skipped as all addresses look to be globally unique")
+    elif (pkt_counter - global_counter) > min_percentage * pkt_counter:
         logger.info("Model clustering")
         # Perform the clustering
         if cluster_method == "optics":
