@@ -328,6 +328,8 @@ if __name__ == "__main__":
 
     cluster_devices = 0
 
+    cluster_failure = False
+
      # Check that at least the 2% of packets have a locally administered MAC address (or skip clustering if all addresses look to be global)
     if df.empty:
         logger.info("Clustering skipped as all addresses look to be globally unique")
@@ -338,73 +340,79 @@ if __name__ == "__main__":
             clustering = OPTICS(min_samples=min_samples, metric=distance_metric)
         else:
             clustering = OPTICS(eps=epsilon, min_samples=min_samples, metric=distance_metric, cluster_method="dbscan")
-        cluster_labels = list(clustering.fit(df).labels_)
-        cluster_tmp = list()
-        values_tmp = list()
-        cluster_mac = defaultdict(list)
-        # Filter the noise group
-        for i, x in enumerate(cluster_labels):
-            if x != -1:
-                cluster_mac[x].append(local_mac_list[i])
-                cluster_tmp.append(x)
-                values_tmp.append(values_list[i])
+        try:
+            cluster_labels = list(clustering.fit(df).labels_)
+        except Exception as e:
+            logger.info("Warning! Clustering will be skipped and ARGO will consider only global MACs. Reason: {}".format(e))
+            cluster_failure = True
 
-        bloom_filter_insertion(main_bf, cluster_mac)
-        # Generate a dictionary to store all the single MAC addresses associated with a certain device model
-        cluster_mac_set = {k: set(v) for k, v in cluster_mac.items()}
+        if not cluster_failure:
+            cluster_tmp = list()
+            values_tmp = list()
+            cluster_mac = defaultdict(list)
+            # Filter the noise group
+            for i, x in enumerate(cluster_labels):
+                if x != -1:
+                    cluster_mac[x].append(local_mac_list[i])
+                    cluster_tmp.append(x)
+                    values_tmp.append(values_list[i])
 
-        cluster_labels = cluster_tmp
-        values_list = values_tmp
-        cluster_values = {cl: [] for cl in set(cluster_labels)}
+            bloom_filter_insertion(main_bf, cluster_mac)
+            # Generate a dictionary to store all the single MAC addresses associated with a certain device model
+            cluster_mac_set = {k: set(v) for k, v in cluster_mac.items()}
 
-        for i, val in enumerate(values_list):
-            cluster = cluster_labels[i]
-            cluster_values[cluster].append(val)
+            cluster_labels = cluster_tmp
+            values_list = values_tmp
+            cluster_values = {cl: [] for cl in set(cluster_labels)}
 
-        # Perform the average of the IEs inside clusters
-        cluster_values = {
-            key: [sum(sub_list) / len(sub_list) for sub_list in zip(*value)] for key, value in cluster_values.items()
-        }
+            for i, val in enumerate(values_list):
+                cluster = cluster_labels[i]
+                cluster_values[cluster].append(val)
 
-        logger.info("Counting devices")
-        device_numbers = dict()
-        cluster_devices = 0
-        if counting_method == "advanced":
-            for key in cluster_values.keys():
-                # Choose the closest device with similar characteristics
-                min_dist = rates_dict[
-                    min(rates_dict.keys(),
-                        key=lambda k: spatial.distance.euclidean(rates_dict[k][0], cluster_values[key]))
-                ][0]
-                closest_rates = [rates_dict[k][1] for k in rates_dict.keys() if min_dist == rates_dict[k][0]]
-                # If multiple matches are found, take the average rate
-                L = sum(closest_rates) / len(closest_rates)
-                # Number of packets inside the cluster
-                N = len(list(filter(lambda k: k == key, cluster_labels)))
-                # Capture time window
-                T = TIME_WINDOW
-                if N / T < max_ratio:
-                    K = N / (L * T)
-                    K = ceil(K)
-                    device_numbers[key] = K if K > 0 else 1
-                else:
-                    device_numbers[key] = default_counter
+            # Perform the average of the IEs inside clusters
+            cluster_values = {
+                key: [sum(sub_list) / len(sub_list) for sub_list in zip(*value)] for key, value in cluster_values.items()
+            }
 
-                if device_numbers[key] > len(cluster_mac_set[key]):
-                    device_numbers[key] = len(cluster_mac_set[key])
-            cluster_devices += sum(device_numbers.values())
-        elif counting_method == "simple":
-            cluster_devices = len(set(cluster_values.keys()))
+            logger.info("Counting devices")
+            device_numbers = dict()
+            cluster_devices = 0
+            if counting_method == "advanced":
+                for key in cluster_values.keys():
+                    # Choose the closest device with similar characteristics
+                    min_dist = rates_dict[
+                        min(rates_dict.keys(),
+                            key=lambda k: spatial.distance.euclidean(rates_dict[k][0], cluster_values[key]))
+                    ][0]
+                    closest_rates = [rates_dict[k][1] for k in rates_dict.keys() if min_dist == rates_dict[k][0]]
+                    # If multiple matches are found, take the average rate
+                    L = sum(closest_rates) / len(closest_rates)
+                    # Number of packets inside the cluster
+                    N = len(list(filter(lambda k: k == key, cluster_labels)))
+                    # Capture time window
+                    T = TIME_WINDOW
+                    if N / T < max_ratio:
+                        K = N / (L * T)
+                        K = ceil(K)
+                        device_numbers[key] = K if K > 0 else 1
+                    else:
+                        device_numbers[key] = default_counter
 
-        logger.info("Associating global MAC addresses with a cluster")
-        for k1 in global_values_dict.keys():
-            distances = list()
-            for k2 in cluster_values.keys():
-                tmp = spatial.distance.euclidean(global_values_dict[k1], cluster_values[k2])
-                distances.append((k2, tmp))
-            min_k = min(distances, key=lambda x: x[1])
-            # Add the global MAC address k1 to a cluster
-            cluster_mac_set[min_k[0]].add(k1)
+                    if device_numbers[key] > len(cluster_mac_set[key]):
+                        device_numbers[key] = len(cluster_mac_set[key])
+                cluster_devices += sum(device_numbers.values())
+            elif counting_method == "simple":
+                cluster_devices = len(set(cluster_values.keys()))
+
+            logger.info("Associating global MAC addresses with a cluster")
+            for k1 in global_values_dict.keys():
+                distances = list()
+                for k2 in cluster_values.keys():
+                    tmp = spatial.distance.euclidean(global_values_dict[k1], cluster_values[k2])
+                    distances.append((k2, tmp))
+                min_k = min(distances, key=lambda x: x[1])
+                # Add the global MAC address k1 to a cluster
+                cluster_mac_set[min_k[0]].add(k1)
 
     logging.info(f"Devices that use globally unique MAC addresses: {global_counter}")
     logging.info(f"Devices that use locally administered MAC addresses: {cluster_devices}")
