@@ -19,6 +19,8 @@ from bloomfilter_operations import *
 from math import ceil
 import pymysql
 
+import paho.mqtt.client as mqtt
+
 
 def bloom_filter_insertion(main_bf, cluster_mac):
     # Insert the MAC address averages inside the Bloom Filter
@@ -154,6 +156,12 @@ if __name__ == "__main__":
     parser.add_argument("--db_password", type=str, default="password", help="Password for the mySQL database.")
     parser.add_argument("--db_name", type=str, default="db", help="Name of the mySQL database.")
     parser.add_argument("--db_table", type=str, default="table", help="Name of the table in the mySQL database.")
+    parser.add_argument("--enable_mqtt", type=bool, default=False, help="Enable data transmission to an MQTT broker, in JSON format")
+    parser.add_argument("--mqtt_addr", type=str, default="127.0.0.1:1883", help="IP address and port of the MQTT broker to which aggregated data should be transmitted")
+    parser.add_argument("--mqtt_topic", type=str, default="argo-tomove", help="Topic that should be used for data transmission to the MQTT broker")
+    parser.add_argument("--mqtt_duration", type=int, default=0, help="Declared capture duration for the JSON data to be transmitted via MQTT, in seconds")
+    parser.add_argument("--mqtt_pos", type=str, default="0:0", help="Declared position, in terms of <latitude>:<longitude>, of the capturing device for the JSON data to be transmitted via MQTT")
+    parser.add_argument("--mqtt_device_id", type=str, default="argo_device", help="Device ID, as a string, to be included in the JSON data for publishing via MQTT")
     opt = vars(parser.parse_args())
 
     file = opt["input_file"]
@@ -168,6 +176,13 @@ if __name__ == "__main__":
     cluster_method = opt["cluster_method"]
     counting_method = opt["counting_method"]
     enable_db = opt["enable_db"]
+    
+    enable_mqtt = opt["enable_mqtt"]
+    mqtt_addr = opt["mqtt_addr"]
+    mqtt_topic = opt["mqtt_topic"]
+    mqtt_duration = opt["mqtt_duration"]
+    mqtt_pos = opt["mqtt_pos"]
+    mqtt_device_id = opt["mqtt_device_id"]
 
     str_timestamp = file.split("Capturing_")[1].split(".pcap")[0]
     date_format = "%d%m%y_%H%M%S"
@@ -440,3 +455,34 @@ if __name__ == "__main__":
             db.close()
     else:
         print(f"Timestamp: {database_time}, Total devices: {total_devices}, Min power: {min_pwr}, Max power: {max_pwr}, Avg power: {avg_pwr}, Global MACs: {global_counter}")
+        
+    mqtt_broker, mqtt_port = mqtt_addr.split(":")
+    mqtt_lat, mqtt_lon = mqtt_pos.split(":")
+
+    # Build the JSON payload
+    json_payload = {
+        "device_id": mqtt_device_id,
+        "timestamp": int(database_time.timestamp()),
+         # Duration of the capture - if not explicitly given, "0" will be sent 
+         "interval_seconds": int(mqtt_duration),
+         "people_count": int(total_devices),
+         "max_rssi": int(max_pwr),
+         "min_rssi": int(min_pwr),
+         "avg_rssi": float(round(avg_pwr, 4)),
+         "latitude": float(round(float(mqtt_lat), 8)),
+         "longitude": float(round(float(mqtt_lon), 8))
+    }
+
+        
+    if enable_mqtt:
+        try:
+            client = mqtt.Client()
+            client.connect(mqtt_broker, int(mqtt_port), keepalive=60)
+            client.publish(mqtt_topic, json.dumps(json_payload), qos=1, retain=False)
+            client.disconnect()
+            logger.info(f"MQTT payload published to {mqtt_topic}: {json_payload}")
+        except Exception as e:
+            logger.error(f"Failed to publish MQTT message: {e}")
+    else:
+        print("JSON data:")
+        print(json_payload)
