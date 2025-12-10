@@ -162,6 +162,7 @@ if __name__ == "__main__":
     parser.add_argument("--mqtt_duration", type=int, default=0, help="Declared capture duration for the JSON data to be transmitted via MQTT, in seconds")
     parser.add_argument("--mqtt_pos", type=str, default="0:0", help="Declared position, in terms of <latitude>:<longitude>, of the capturing device for the JSON data to be transmitted via MQTT")
     parser.add_argument("--mqtt_device_id", type=str, default="argo_device", help="Device ID, as a string, to be included in the JSON data for publishing via MQTT")
+    parser.add_argument("--mqtt_credentials", type=str, default="none", help="If required, credentials for the MQTT broker connection; the format should be username#password.")
     opt = vars(parser.parse_args())
 
     file = opt["input_file"]
@@ -183,6 +184,7 @@ if __name__ == "__main__":
     mqtt_duration = opt["mqtt_duration"]
     mqtt_pos = opt["mqtt_pos"]
     mqtt_device_id = opt["mqtt_device_id"]
+    mqtt_credentials = opt["mqtt_credentials"]
 
     str_timestamp = file.split("Capturing_")[1].split(".pcap")[0]
     date_format = "%d%m%y_%H%M%S"
@@ -477,6 +479,9 @@ if __name__ == "__main__":
     if enable_mqtt:
         try:
             client = mqtt.Client()
+            
+            mqtt_user, mqtt_pw = mqtt_credentials.split("#")
+            client.username_pw_set(username=mqtt_user, password=mqtt_pw)
             client.connect(mqtt_broker, int(mqtt_port), keepalive=60)
             client.publish(mqtt_topic, json.dumps(json_payload), qos=1, retain=False)
             client.disconnect()
