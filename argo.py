@@ -161,7 +161,7 @@ if __name__ == "__main__":
     parser.add_argument("--mqtt_addr", type=str, default="127.0.0.1:1883", help="IP address and port of the MQTT broker to which aggregated data should be transmitted")
     parser.add_argument("--mqtt_topic", type=str, default="argo-tomove", help="Topic that should be used for data transmission to the MQTT broker")
     parser.add_argument("--mqtt_duration", type=int, default=0, help="Declared capture duration for the JSON data to be transmitted via MQTT, in seconds")
-    parser.add_argument("--mqtt_pos", type=str, default="0:0", help="Declared position, in terms of <latitude>:<longitude>, of the capturing device for the JSON data to be transmitted via MQTT")
+    parser.add_argument("--mqtt_pos", type=str, default="0:0", help="Declared position, in terms of <latitude>:<longitude>, of the capturing device for the JSON data to be transmitted via MQTT; this will also be used when --enable_mqtt_xtra is specified")
     parser.add_argument("--mqtt_device_id", type=str, default="argo_device", help="Device ID, as a string, to be included in the JSON data for publishing via MQTT; this will also be used when --enable_mqtt_xtra is specified")
     parser.add_argument("--mqtt_credentials", type=str, default="none", help="If required, credentials for the MQTT broker connection; the format should be username#password")
 
@@ -169,7 +169,6 @@ if __name__ == "__main__":
     parser.add_argument("--mqtt_addr_xtra", type=str, default="127.0.0.1:1884", help="IP address and port of the MQTT broker to which aggregated data should be transmitted - optional second extra MQTT connection")
     parser.add_argument("--mqtt_topic_xtra", type=str, default="argo-tomove", help="Topic that should be used for data transmission to the MQTT broker - optional second extra MQTT connection")
     parser.add_argument("--mqtt_duration_xtra", type=int, default=0, help="Declared capture duration for the JSON data to be transmitted via MQTT, in seconds - optional second extra MQTT connection")
-    parser.add_argument("--mqtt_pos_xtra", type=str, default="0:0", help="Declared position, in terms of <latitude>:<longitude>, of the capturing device for the JSON data to be transmitted via MQTT - optional second extra MQTT connection")
     parser.add_argument("--mqtt_credentials_xtra", type=str, default="none", help="If required, credentials for the MQTT broker connection; the format should be username#password  - optional second extra MQTT connection")
 
     opt = vars(parser.parse_args())
@@ -199,7 +198,6 @@ if __name__ == "__main__":
     mqtt_addr_xtra = opt["mqtt_addr_xtra"]
     mqtt_topic_xtra = opt["mqtt_topic_xtra"]
     mqtt_duration_xtra = opt["mqtt_duration_xtra"]
-    mqtt_pos_xtra = opt["mqtt_pos_xtra"]
     mqtt_credentials_xtra = opt["mqtt_credentials_xtra"]
 
     str_timestamp = file.split("Capturing_")[1].split(".pcap")[0]
@@ -476,6 +474,8 @@ if __name__ == "__main__":
         
     mqtt_broker, mqtt_port = mqtt_addr.split(":")
     mqtt_lat, mqtt_lon = mqtt_pos.split(":")
+
+    mqtt_broker_xtra, mqtt_port_xtra = mqtt_addr_xtra.split(":")
 
     # Build the JSON payload
     json_payload = {
