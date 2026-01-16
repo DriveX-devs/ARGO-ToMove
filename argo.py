@@ -508,6 +508,22 @@ if __name__ == "__main__":
         print("JSON data:")
         print(json_payload)
 
+
+    # Build the extra JSON payload (equal to json_payload, but with the number of global MACs as additional information)
+    json_payload_xtra = {
+        "device_id": mqtt_device_id,
+        "timestamp": int(database_time.timestamp()),
+         # Duration of the capture - if not explicitly given, "0" will be sent 
+        "interval_seconds": int(mqtt_duration),
+        "people_count": int(total_devices),
+        "global_MACs": int(global_counter),
+        "max_rssi": int(max_pwr),
+        "min_rssi": int(min_pwr),
+        "avg_rssi": float(round(avg_pwr, 4)),
+        "latitude": float(round(float(mqtt_lat), 8)),
+        "longitude": float(round(float(mqtt_lon), 8))
+    }
+
     if enable_mqtt_xtra:
         try:
             client_xtra = mqtt.Client()
@@ -515,7 +531,7 @@ if __name__ == "__main__":
             mqtt_user_xtra, mqtt_pw_xtra = mqtt_credentials_xtra.split("#")
             client_xtra.username_pw_set(username=mqtt_user_xtra, password=mqtt_pw_xtra)
             client_xtra.connect(mqtt_broker_xtra, int(mqtt_port_xtra), keepalive=60)
-            client_xtra.publish(mqtt_topic_xtra, json.dumps(json_payload), qos=1, retain=False)
+            client_xtra.publish(mqtt_topic_xtra, json.dumps(json_payload_xtra), qos=1, retain=False)
             client_xtra.disconnect()
             logger.info(f"MQTT payload published to {mqtt_topic_xtra}: {json_payload}")
         except Exception as e:
