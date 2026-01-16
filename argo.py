@@ -156,13 +156,22 @@ if __name__ == "__main__":
     parser.add_argument("--db_password", type=str, default="password", help="Password for the mySQL database.")
     parser.add_argument("--db_name", type=str, default="db", help="Name of the mySQL database.")
     parser.add_argument("--db_table", type=str, default="table", help="Name of the table in the mySQL database.")
+
     parser.add_argument("--enable_mqtt", type=bool, default=False, help="Enable data transmission to an MQTT broker, in JSON format")
     parser.add_argument("--mqtt_addr", type=str, default="127.0.0.1:1883", help="IP address and port of the MQTT broker to which aggregated data should be transmitted")
     parser.add_argument("--mqtt_topic", type=str, default="argo-tomove", help="Topic that should be used for data transmission to the MQTT broker")
     parser.add_argument("--mqtt_duration", type=int, default=0, help="Declared capture duration for the JSON data to be transmitted via MQTT, in seconds")
     parser.add_argument("--mqtt_pos", type=str, default="0:0", help="Declared position, in terms of <latitude>:<longitude>, of the capturing device for the JSON data to be transmitted via MQTT")
-    parser.add_argument("--mqtt_device_id", type=str, default="argo_device", help="Device ID, as a string, to be included in the JSON data for publishing via MQTT")
-    parser.add_argument("--mqtt_credentials", type=str, default="none", help="If required, credentials for the MQTT broker connection; the format should be username#password.")
+    parser.add_argument("--mqtt_device_id", type=str, default="argo_device", help="Device ID, as a string, to be included in the JSON data for publishing via MQTT; this will also be used when --enable_mqtt_xtra is specified")
+    parser.add_argument("--mqtt_credentials", type=str, default="none", help="If required, credentials for the MQTT broker connection; the format should be username#password")
+
+    parser.add_argument("--enable_mqtt_xtra", type=bool, default=False, help="Enable data transmission to an MQTT broker, in JSON format - optional second extra MQTT connection")
+    parser.add_argument("--mqtt_addr_xtra", type=str, default="127.0.0.1:1884", help="IP address and port of the MQTT broker to which aggregated data should be transmitted - optional second extra MQTT connection")
+    parser.add_argument("--mqtt_topic_xtra", type=str, default="argo-tomove", help="Topic that should be used for data transmission to the MQTT broker - optional second extra MQTT connection")
+    parser.add_argument("--mqtt_duration_xtra", type=int, default=0, help="Declared capture duration for the JSON data to be transmitted via MQTT, in seconds - optional second extra MQTT connection")
+    parser.add_argument("--mqtt_pos_xtra", type=str, default="0:0", help="Declared position, in terms of <latitude>:<longitude>, of the capturing device for the JSON data to be transmitted via MQTT - optional second extra MQTT connection")
+    parser.add_argument("--mqtt_credentials_xtra", type=str, default="none", help="If required, credentials for the MQTT broker connection; the format should be username#password  - optional second extra MQTT connection")
+
     opt = vars(parser.parse_args())
 
     file = opt["input_file"]
@@ -185,6 +194,13 @@ if __name__ == "__main__":
     mqtt_pos = opt["mqtt_pos"]
     mqtt_device_id = opt["mqtt_device_id"]
     mqtt_credentials = opt["mqtt_credentials"]
+
+    enable_mqtt_xtra = opt["enable_mqtt_xtra"]
+    mqtt_addr_xtra = opt["mqtt_addr_xtra"]
+    mqtt_topic_xtra = opt["mqtt_topic_xtra"]
+    mqtt_duration_xtra = opt["mqtt_duration_xtra"]
+    mqtt_pos_xtra = opt["mqtt_pos_xtra"]
+    mqtt_credentials_xtra = opt["mqtt_credentials_xtra"]
 
     str_timestamp = file.split("Capturing_")[1].split(".pcap")[0]
     date_format = "%d%m%y_%H%M%S"
@@ -491,3 +507,16 @@ if __name__ == "__main__":
     else:
         print("JSON data:")
         print(json_payload)
+
+    if enable_mqtt_xtra:
+        try:
+            client_xtra = mqtt.Client()
+            
+            mqtt_user_xtra, mqtt_pw_xtra = mqtt_credentials_xtra.split("#")
+            client_xtra.username_pw_set(username=mqtt_user_xtra, password=mqtt_pw_xtra)
+            client_xtra.connect(mqtt_broker_xtra, int(mqtt_port_xtra), keepalive=60)
+            client_xtra.publish(mqtt_topic_xtra, json.dumps(json_payload), qos=1, retain=False)
+            client_xtra.disconnect()
+            logger.info(f"MQTT payload published to {mqtt_topic_xtra}: {json_payload}")
+        except Exception as e:
+            logger.error(f"Failed to publish MQTT message: {e}")
