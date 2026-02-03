@@ -43,7 +43,7 @@ last_payload = None
 def determine_vru_level(diff: int):
     if diff <= 10:
         return "low", "green"
-    elif diff <= 25:
+    elif diff <= 20:
         return "medium", "yellow"
     else:
         return "high", "red"
