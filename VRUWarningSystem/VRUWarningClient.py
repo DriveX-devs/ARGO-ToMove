@@ -41,9 +41,9 @@ last_payload = None
 
 # Theshold logic for displaying the warnings
 def determine_vru_level(diff: int):
-    if diff <= 10:
+    if diff < 10:
         return "low", "green"
-    elif diff <= 20:
+    elif diff < 20:
         return "medium", "yellow"
     else:
         return "high", "red"
