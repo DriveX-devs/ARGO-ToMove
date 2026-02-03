@@ -1,0 +1,2 @@
+#!/bin/bash
+python3 VRUWarningClient.py --mqtt-broker 130.192.225.20 --mqtt-port 1883 --mqtt-topic peoplecounting-polito --mqtt-username user --mqtt-password password --web-host 0.0.0.0 --web-port 8090
