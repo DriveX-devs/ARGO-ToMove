@@ -133,7 +133,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_file", type=str, default="./input.pcap", help="Path for the .pcap trace.")
     parser.add_argument("--max_ratio", type=int, default=100, help="Maximum Ratio for clustering algorithm.")
-    parser.add_argument("--power_threshold", type=int, default=-100, help="Threshold for the capturing power.")
+    parser.add_argument("--power_threshold", type=int, default=-70, help="Threshold for the capturing power.")
     parser.add_argument("--default_counter", type=int, default=1,
                         help="Default number assigned to a cluster if the condition on the Maximum Ratio is not respected.")
     parser.add_argument("--min_percentage", type=float, default=0.002,
