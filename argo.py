@@ -147,7 +147,7 @@ if __name__ == "__main__":
                         help="Choose the rate to get from the database. The possibilities are: locked_rate, awake_rate, active_rate or mean_rate.")
     parser.add_argument("--cluster_method", type=str, choices=["dbscan", "optics"], default="optics",
                         help="Clustering method, the possible choices are dbscan and optics.")
-    parser.add_argument("--counting_method", type=str, choices=["simple", "advanced"], default="simple",
+    parser.add_argument("--counting_method", type=str, choices=["simple", "advanced"], default="advanced",
                         help="Counting method when a cluster is examined, the possible choices are simple and advanced.")
     parser.add_argument("--enable_db",type=bool, default=False,help="Enable data transmission to the mySQL database.")
     parser.add_argument("--db_ip", type=str, default="127.0.0.1",help="IP address of the mySQL database server.")
@@ -243,9 +243,14 @@ if __name__ == "__main__":
     main_bf.anonymization_noise(30)
 
     logger.info("Reading pcap file")
-    capture = rdpcap(file)
-
-    flat_time = float(capture[0].time)
+    flag = 1
+    try:
+        capture = rdpcap(file)
+        flat_time = float(capture[0].time)
+    except Exception as e:
+        flag = 0
+        flat_time = 0
+    
     TIME_WINDOW = 0
     pkt_counter = 0
     values_list = list()
@@ -264,98 +269,99 @@ if __name__ == "__main__":
     logger.info("Parsing packets")
     quadruplets = {}
     count = {}
-    for i, packet in enumerate(capture):
+    if flag == 1:
+        for i, packet in enumerate(capture):
 
-        src = packet.addr2
-        quadruplets[i] = [-1, -1, -1, -1]
-        if packet.dBm_AntSignal <= power_threshold:
-            continue
-
-        rx_pwr = packet.dBm_AntSignal
-
-        # Discard positive values that are likely due to a driver bug
-        if rx_pwr <= 0:
-            if rx_pwr < min_pwr:
-                min_pwr = rx_pwr
-
-            if rx_pwr > max_pwr:
-                max_pwr = rx_pwr
-
-            pwr_pkt_counter += 1
-
-            avg_pwr = avg_pwr + (rx_pwr - avg_pwr) / pwr_pkt_counter
-
-        pkt_counter += 1
-
-        pkt_counter += 1
-        TIME_WINDOW = float(packet.time) - flat_time
-        probe_req = packet.getlayer("Dot11ProbeReq")
-        if probe_req:
-            first_octet = int(float.fromhex(src.split(":")[0][1]))
-            # Check the nature of MAC address
-            if (first_octet & 2) == 0:
-                # Globally unique
-                if not main_bf.check(src):
-                    main_bf.add(src)
-                if src not in global_mac_list:
-                    global_counter += 1
-                    global_mac_list.append(src)
+            src = packet.addr2
+            quadruplets[i] = [-1, -1, -1, -1]
+            if packet.dBm_AntSignal <= power_threshold:
                 continue
-            packet_dict = {}
-            counter = {}
-            layer = None
-            for line in packet.show2(dump=True).split('\n'):
-                if '###' in line:
-                    layer = line.strip('#[] ')
-                    if layer == 'RadioTap' or layer == '|###[ RadioTap Extended presence mask':
-                        pass
-                    else:
-                        if layer not in packet_dict.keys():
-                            counter[layer] = 0
-                        else:
-                            count = counter[layer] + 1
-                            counter[layer] += 1
-                            layer = layer + str(count)
-                        packet_dict[layer] = {}
-                elif '=' in line:
-                    if layer == 'RadioTap' or layer == '|###[ RadioTap Extended presence mask':
-                        pass
-                    else:
-                        key, val = line.split('=', 1)
-                        packet_dict[layer][key.strip()] = val.strip()
 
-            for entry in packet_dict.keys():
-                if 'ID' in packet_dict[entry]:
-                    src = packet.addr2
-                    if packet_dict[entry]['ID'] == 'VHT Capabilities':
-                        try:
-                            quadruplets[i][0] = process_input_string(packet_dict[entry]['info'])
-                        except Exception as e:
-                            pass
-                    elif packet_dict[entry]['ID'] == 'Extended Capabilities':
-                        try:
-                            quadruplets[i][1] = process_input_string(packet_dict[entry]['info'])
-                        except Exception as e:
-                            pass
-                    elif packet_dict[entry]['ID'] == 'HT Capabilities':
-                        try:
-                            quadruplets[i][2] = calculate_combined_sum(packet_dict[entry])
-                        except Exception as e:
-                            pass
-                    elif packet_dict[entry]['ID'] == 'Vendor Specific':
-                        if 'oui' in packet_dict[entry].keys():
-                            quadruplets[i][3] += process_oui(packet_dict[entry]['oui'], packet_dict[entry]['info'])
-                        else:
-                            quadruplets[i][3] += process_input_string(packet_dict[entry]['info'])
+            rx_pwr = packet.dBm_AntSignal
 
-            new_df = pd.DataFrame(
-                {"vht_cap": [quadruplets[i][0]], "ext_cap": [quadruplets[i][1]], "ht_cap": [quadruplets[i][2]], "vendor": [quadruplets[i][3]]})
-            df = pd.concat(
-                [df, new_df],
-                ignore_index=True
-            )
-            values_list.append(quadruplets[i])
-            local_mac_list.append(src)
+            # Discard positive values that are likely due to a driver bug
+            if rx_pwr <= 0:
+                if rx_pwr < min_pwr:
+                    min_pwr = rx_pwr
+
+                if rx_pwr > max_pwr:
+                    max_pwr = rx_pwr
+
+                pwr_pkt_counter += 1
+
+                avg_pwr = avg_pwr + (rx_pwr - avg_pwr) / pwr_pkt_counter
+
+            pkt_counter += 1
+
+            pkt_counter += 1
+            TIME_WINDOW = float(packet.time) - flat_time
+            probe_req = packet.getlayer("Dot11ProbeReq")
+            if probe_req:
+                first_octet = int(float.fromhex(src.split(":")[0][1]))
+                # Check the nature of MAC address
+                if (first_octet & 2) == 0:
+                    # Globally unique
+                    if not main_bf.check(src):
+                        main_bf.add(src)
+                    if src not in global_mac_list:
+                        global_counter += 1
+                        global_mac_list.append(src)
+                    continue
+                packet_dict = {}
+                counter = {}
+                layer = None
+                for line in packet.show2(dump=True).split('\n'):
+                    if '###' in line:
+                        layer = line.strip('#[] ')
+                        if layer == 'RadioTap' or layer == '|###[ RadioTap Extended presence mask':
+                            pass
+                        else:
+                            if layer not in packet_dict.keys():
+                                counter[layer] = 0
+                            else:
+                                count = counter[layer] + 1
+                                counter[layer] += 1
+                                layer = layer + str(count)
+                            packet_dict[layer] = {}
+                    elif '=' in line:
+                        if layer == 'RadioTap' or layer == '|###[ RadioTap Extended presence mask':
+                            pass
+                        else:
+                            key, val = line.split('=', 1)
+                            packet_dict[layer][key.strip()] = val.strip()
+
+                for entry in packet_dict.keys():
+                    if 'ID' in packet_dict[entry]:
+                        src = packet.addr2
+                        if packet_dict[entry]['ID'] == 'VHT Capabilities':
+                            try:
+                                quadruplets[i][0] = process_input_string(packet_dict[entry]['info'])
+                            except Exception as e:
+                                pass
+                        elif packet_dict[entry]['ID'] == 'Extended Capabilities':
+                            try:
+                                quadruplets[i][1] = process_input_string(packet_dict[entry]['info'])
+                            except Exception as e:
+                                pass
+                        elif packet_dict[entry]['ID'] == 'HT Capabilities':
+                            try:
+                                quadruplets[i][2] = calculate_combined_sum(packet_dict[entry])
+                            except Exception as e:
+                                pass
+                        elif packet_dict[entry]['ID'] == 'Vendor Specific':
+                            if 'oui' in packet_dict[entry].keys():
+                                quadruplets[i][3] += process_oui(packet_dict[entry]['oui'], packet_dict[entry]['info'])
+                            else:
+                                quadruplets[i][3] += process_input_string(packet_dict[entry]['info'])
+
+                new_df = pd.DataFrame(
+                    {"vht_cap": [quadruplets[i][0]], "ext_cap": [quadruplets[i][1]], "ht_cap": [quadruplets[i][2]], "vendor": [quadruplets[i][3]]})
+                df = pd.concat(
+                    [df, new_df],
+                    ignore_index=True
+                )
+                values_list.append(quadruplets[i])
+                local_mac_list.append(src)
 
     cluster_devices = 0
 
