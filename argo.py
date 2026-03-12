@@ -133,13 +133,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_file", type=str, default="./input.pcap", help="Path for the .pcap trace.")
     parser.add_argument("--max_ratio", type=int, default=100, help="Maximum Ratio for clustering algorithm.")
-    parser.add_argument("--power_threshold", type=int, default=-70, help="Threshold for the capturing power.")
+    parser.add_argument("--power_threshold", type=int, default=-75, help="Threshold for the capturing power.")
     parser.add_argument("--default_counter", type=int, default=1,
                         help="Default number assigned to a cluster if the condition on the Maximum Ratio is not respected.")
     parser.add_argument("--min_percentage", type=float, default=0.002,
                         help="Minimum percentage of probe request that must have locally administered MAC address for doing clustering.")
     parser.add_argument("--epsilon", type=float, default=0.001, help="Epsilon parameter for DBSCAN clustering.")
-    parser.add_argument("--min_samples", type=int, default=4, help="Min samples parameter for clustering.")
+    parser.add_argument("--min_samples", type=int, default=2, help="Min samples parameter for clustering.")
     parser.add_argument("--distance_metric", type=str, default="euclidean",
                         help="Metric parameter for clustering.")
     parser.add_argument("--rate_modality", type=str, default="mean_rate",
