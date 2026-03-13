@@ -43,6 +43,10 @@ if args.language != "IT" and args.language != "EN":
   print("[ERROR] The language should be either IT or EN")
   os._exit(1)
 
+if args.use_range < 0:
+  print("[ERROR] Invalid negative number after --use-range")
+  os._exit(1)
+
 last_payload = None
 
 # Theshold logic for displaying the warnings
