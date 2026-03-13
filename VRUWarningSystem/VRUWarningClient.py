@@ -574,7 +574,7 @@ HTML = r"""
 
   const panel = document.getElementById("panel");
   const statusEl = document.getElementById("status");
-  const connHint = document.getElementById("connHint");
+  // const connHint = document.getElementById("connHint");
   const warnTriangle = document.getElementById("warnTriangle");
   const imgLow = document.getElementById("imgLow");
   const svgMed = document.getElementById("svgMed");
@@ -591,13 +591,13 @@ HTML = r"""
   socket.on("connect", () => {
     console.log("[HMI] Socket connected", socket.id);
     statusEl.textContent = translate("status_connected");
-    connHint.textContent = "Socket: connected";
+    // connHint.textContent = "Socket: connected";
   });
 
   socket.on("disconnect", (reason) => {
     console.log("[HMI] Socket disconnected", reason);
     statusEl.textContent = translate("status_disconnected");
-    connHint.textContent = "Socket: disconnected (" + reason + ")";
+    // connHint.textContent = "Socket: disconnected (" + reason + ")";
   });
 
   socket.on("config", cfg => {
@@ -653,7 +653,7 @@ HTML = r"""
     }
 
     statusEl.textContent = translate("status_live");
-    connHint.textContent = "Socket: receiving updates";
+    // connHint.textContent = "Socket: receiving updates";
   });
 </script>
 </body>
