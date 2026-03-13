@@ -21,6 +21,8 @@ parser.add_argument("--mqtt-username", required=True, help="MQTT username")
 parser.add_argument("--mqtt-password", required=True, help="MQTT password")
 parser.add_argument("--web-host", default="0.0.0.0", help="Web server host")
 parser.add_argument("--web-port", type=int, default=5000, help="Web server port")
+parser.add_argument("--use-range", type=int, default=0, help="Display an estimated range instead of a precise number. You should specify the +/- range after this option. If set to 0 a precise number will be displayed.")
+parser.add_argument("--language", default="EN", help="Display language. Can be either EN or IT.")
 
 args = parser.parse_args()
 
@@ -36,6 +38,10 @@ socketio = SocketIO(
     logger=True,
     engineio_logger=True
 )
+
+if args.language != "IT" and args.language != "EN":
+  print("[ERROR] The language should be either IT or EN")
+  os._exit(1)
 
 last_payload = None
 
@@ -104,6 +110,8 @@ def on_message(client, userdata, msg):
         "VRU_presence_level_color": color,
         "string_ts": string_ts,
         "interval_seconds": data.get("interval_seconds"),
+        "language": args.language,
+        "use_range": args.use_range
     }
 
     print("[HMI] Sending update to web clients via SocketIO")
@@ -429,7 +437,7 @@ HTML = r"""
 <body>
   <div class="wrap">
     <div class="topbar">
-      <div class="title">VRU Presence Warning - Vehicle HMI</div>
+      <div class="title" id="titleTxt">VRU Presence Warning - Vehicle HMI</div>
       <div class="pill"><span class="dot" id="dot"></span><span id="status">Waiting for data...</span></div>
     </div>
 
@@ -441,28 +449,28 @@ HTML = r"""
             <div class="statusLeft">
               <div class="levelChip" id="chip">!</div>
               <div>
-                <div class="labelSmall">VRU presence level</div>
+                <div class="labelSmall" id="lblPresence">VRU presence level</div>
                 <div class="levelText" id="level">--</div>
               </div>
             </div>
             <div class="countBox">
               <div class="count" id="vruCount">--</div>
-              <div class="countSub">Estimated pedestrians</div>
+              <div class="countSub" id="lblEstimated">Estimated pedestrians</div>
             </div>
           </div>
         </div>
 
         <div class="metaGrid">
           <div class="card">
-            <div class="k">Last measurement</div>
+            <div class="k" id="lblLastMeas">Last measurement</div>
             <div class="v" id="ts">--</div>
           </div>
           <div class="card">
-            <div class="k">Interval</div>
+            <div class="k" id="lblInterval">Interval</div>
             <div class="v" id="interval">--</div>
           </div>
           <div class="card">
-            <div class="k">Device</div>
+            <div class="k" id="lblDevice">Device</div>
             <div class="v" id="device">--</div>
           </div>
         </div>
@@ -498,7 +506,66 @@ HTML = r"""
   </div>
 
 <script>
-  // Forcing a robust transport; if your network allows websockets you can add it back.
+  // Multiple language support
+  const I18N = {
+    EN: {
+      titleTxt: "VRU Presence Warning - Vehicle HMI",
+      lblPresence: "VRU presence level",
+      lblEstimated: "Estimated pedestrians",
+      lblLastMeas: "Last measurement",
+      lblInterval: "Interval",
+      lblDevice: "Device",
+      status_wait: "Waiting for data...",
+      status_connected: "Connected — waiting for MQTT…",
+      status_disconnected: "Disconnected — retrying…",
+      status_live: "LIVE - updated",
+      interval_suffix: " s",
+      level_low: "LOW",
+      level_medium: "MEDIUM",
+      level_high: "HIGH",
+    },
+    IT: {
+      titleTxt: "Allerta Presenza VRU - HMI AuToMove",
+      lblPresence: "Livello presenza VRU",
+      lblEstimated: "Pedoni stimati",
+      lblLastMeas: "Ultima misurazione",
+      lblInterval: "Intervallo",
+      lblDevice: "Dispositivo",
+      status_wait: "In attesa dei dati...",
+      status_connected: "Connesso - in attesa di MQTT…",
+      status_disconnected: "Disconnesso - riconnessione in corso…",
+      status_live: "LIVE - aggiornato",
+      interval_suffix: " s",
+      level_low: "BASSO",
+      level_medium: "MEDIO",
+      level_high: "ALTO",
+    }
+  };
+
+  let currentLang = "EN";
+
+  function translate(key){
+    const dict = I18N[currentLang] || I18N.EN;
+    return dict[key] ?? (I18N.EN[key] ?? key);
+  }
+
+  function applyLanguage(lang){
+    currentLang = (lang === "IT" || lang === "EN") ? lang : "EN";
+
+    // Update the page language (useful for accessibility) - we consider here that only IT and EN are supported
+    document.documentElement.lang = (currentLang === "IT") ? "it" : "en";
+
+    // Update static labels
+    const keys = ["titleTxt","lblPresence","lblEstimated","lblLastMeas","lblInterval","lblDevice"];
+    for (const id of keys){
+      const el = document.getElementById(id);
+      if (el) {
+        el.textContent = translate(id);
+      }
+    }
+  }
+
+  // Forcing a robust transport
   const socket = io({ transports: ["polling"] });
 
   const panel = document.getElementById("panel");
@@ -519,27 +586,47 @@ HTML = r"""
 
   socket.on("connect", () => {
     console.log("[HMI] Socket connected", socket.id);
-    statusEl.textContent = "Connected — waiting for MQTT…";
+    statusEl.textContent = translate("status_connected");
     connHint.textContent = "Socket: connected";
   });
 
   socket.on("disconnect", (reason) => {
     console.log("[HMI] Socket disconnected", reason);
-    statusEl.textContent = "Disconnected — retrying…";
+    statusEl.textContent = translate("status_disconnected");
     connHint.textContent = "Socket: disconnected (" + reason + ")";
+  });
+
+  socket.on("config", cfg => {
+    console.log("[HMI] Config received:", cfg);
+    applyLanguage(cfg.language);
   });
 
   socket.on("update", d => {
     console.log("[HMI] update received:", d);
 
     // Expect keys from your Python payload:
-    // VRU_presence_level, VRU_presence_level_color, VRU_count, string_ts, interval_seconds, device_id
+    // VRU_presence_level, VRU_presence_level_color, VRU_count, string_ts, interval_seconds, device_id, language, use_range
+
+    applyLanguage(d.language);
 
     const lvl = (d.VRU_presence_level || "high").toLowerCase();
     setTheme(lvl);
 
-    document.getElementById("level").textContent = lvl.toUpperCase();
-    document.getElementById("vruCount").textContent = (d.VRU_count !== undefined) ? d.VRU_count : "--";
+    document.getElementById("level").textContent = translate("level_" + lvl);
+    if (d.use_range > 0) {
+      if (d.VRU_count !== undefined) {
+        VRU_count_lb = d.VRU_count - d.use_range;
+        if (VRU_count_lb < 0) {
+          VRU_count_lb = 0;
+        }
+        VRU_count_ub = d.VRU_count + d.use_range;
+        document.getElementById("vruCount").textContent = VRU_count_lb + "-" + VRU_count_ub;
+      } else {
+        document.getElementById("vruCount").textContent = "--";
+      }
+    } else {
+      document.getElementById("vruCount").textContent = (d.VRU_count !== undefined) ? d.VRU_count : "--";
+    }
     document.getElementById("ts").textContent = d.string_ts || "--";
     document.getElementById("interval").textContent =
       (d.interval_seconds !== undefined && d.interval_seconds !== null) ? (d.interval_seconds + " s") : "--";
@@ -561,7 +648,7 @@ HTML = r"""
       imgHigh.style.display = "block";
     }
 
-    statusEl.textContent = "LIVE — updated";
+    statusEl.textContent = translate("status_live");
     connHint.textContent = "Socket: receiving updates";
   });
 </script>
@@ -576,6 +663,7 @@ def index():
 @socketio.on("connect")
 def _connect():
     print("[HMI] Browser connected!")
+    socketio.emit("config", {"language": args.language})
     global last_payload
     if last_payload is not None:
         print("[HMI] Sending last payload to newly connected client")
