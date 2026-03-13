@@ -236,6 +236,13 @@ if __name__ == "__main__":
         else:
             rates_dict[values["id"]] = (values["cap_id"], values[rate_modality])
 
+    # Read the blacklist
+    blacklist = set()
+    with open("blacklist.txt", "r") as fr:
+        lines = fr.readlines()
+        for l in lines:
+            blacklist.add(l)
+
     logger.info("Creating Bloom Filter structure")
     # BF Creation
     main_bf = BloomFilter(10000, 7)
@@ -273,6 +280,8 @@ if __name__ == "__main__":
         for i, packet in enumerate(capture):
 
             src = packet.addr2
+            if src in blacklist:
+                continue
             quadruplets[i] = [-1, -1, -1, -1]
             if packet.dBm_AntSignal <= power_threshold:
                 continue

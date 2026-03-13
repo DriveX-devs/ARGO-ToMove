@@ -74,10 +74,11 @@ def on_message(client, userdata, msg):
 
     # We suppose that VRUs are carrying normal smartphone, who should typically use randomized MACs
     # Therefore we estimate the count by subtracting the global MACs from the overall people count
-    VRU_count=people-global_MACs
+    # VRU_count=people-global_MACs
 
     # Get the current "VRU presence level" based on "VRU_count"
-    level, color = determine_vru_level(VRU_count)
+    # level, color = determine_vru_level(VRU_count)
+    level, color = determine_vru_level(people)
 
     # Take the masurement timestamp and convert it to a human-redable format using the USER_TZ timezone
     now_ts = int(data.get("timestamp", time.time()))
@@ -88,7 +89,8 @@ def on_message(client, userdata, msg):
     print(
         f"[MQTT] [DEBUG] "
         f"Current_time={string_ts}, total_count={people}, global_MACs={global_MACs}, "
-        f"VRU_count={VRU_count}, VRU_presence_level={level}"
+        # f"VRU_count={VRU_count}, VRU_presence_level={level}"
+        f"VRU_count={people}, VRU_presence_level={level}"
     )
 
     # Prepare the data to be sent to the web-based HMI
@@ -96,7 +98,8 @@ def on_message(client, userdata, msg):
         "device_id": data.get("device_id"),
         "people_count": people,
         "global_MACs": global_MACs,
-        "VRU_count": VRU_count,
+        # "VRU_count": VRU_count,
+        "VRU_count": people,
         "VRU_presence_level": level,
         "VRU_presence_level_color": color,
         "string_ts": string_ts,
