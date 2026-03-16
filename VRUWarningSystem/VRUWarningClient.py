@@ -96,7 +96,7 @@ def on_message(client, userdata, msg):
               current_data.append((l.split(",")[0], l.split(",")[1], l.split(",")[2]))
     
     ts = time.time()
-    current_data.append((datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S'), people, global_MACs))
+    current_data.append((datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S'), people, global_MACs))
     if len(current_data) > QUEUE_LENGHT:
         current_data.pop(0)
     
