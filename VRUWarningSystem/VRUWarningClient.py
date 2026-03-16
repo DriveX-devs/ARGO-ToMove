@@ -101,6 +101,7 @@ def on_message(client, userdata, msg):
         current_data.pop(0)
     
     with open("CountedVRU.csv", "w") as fw:
+        fw.write("timestamp,VRU,global_MACs\n")
         for cd in current_data:
             fw.write(f"{cd[0]},{cd[1]},{cd[2]}\n")
 
