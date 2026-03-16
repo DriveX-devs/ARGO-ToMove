@@ -12,6 +12,8 @@ from flask import Flask, render_template_string
 from flask_socketio import SocketIO
 import paho.mqtt.client as mqtt
 
+QUEUE_LENGHT = 50
+
 # Command line arguments to configure MQTT connection
 parser = argparse.ArgumentParser(description="On-vehicle VRU Presence system - MQTT client")
 parser.add_argument("--mqtt-broker", required=True, help="MQTT broker hostname/IP")
@@ -81,6 +83,21 @@ def on_message(client, userdata, msg):
 
     people = int(data.get("people_count", 0))
     global_MACs = int(data.get("global_MACs", 0))
+
+    current_data = list()
+    with open("CountedVRU.csv", "r") as fr:
+        lines = fr.readlines()
+        for l in lines:
+            current_data.append((l.split(",")[0], l.split(",")[1], l.split(",")[2]))
+    
+    ts = time.time()
+    current_data.append((datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S'), people, global_MACs))
+    if len(current_data) > QUEUE_LENGHT:
+        current_data.pop(0)
+    
+    with open("CountedVRU.csv", "w") as fw:
+        for cd in current_data:
+            fw.write(f"{cd[0]},{cd[1]},{cd[2]}\n")
 
     # We suppose that VRUs are carrying normal smartphone, who should typically use randomized MACs
     # Therefore we estimate the count by subtracting the global MACs from the overall people count
