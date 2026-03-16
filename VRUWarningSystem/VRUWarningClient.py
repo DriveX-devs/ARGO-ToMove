@@ -11,8 +11,9 @@ from zoneinfo import ZoneInfo
 from flask import Flask, render_template_string
 from flask_socketio import SocketIO
 import paho.mqtt.client as mqtt
+from pathlib import Path
 
-QUEUE_LENGHT = 50
+QUEUE_LENGHT = 500
 
 # Command line arguments to configure MQTT connection
 parser = argparse.ArgumentParser(description="On-vehicle VRU Presence system - MQTT client")
@@ -85,10 +86,14 @@ def on_message(client, userdata, msg):
     global_MACs = int(data.get("global_MACs", 0))
 
     current_data = list()
-    with open("CountedVRU.csv", "r") as fr:
-        lines = fr.readlines()
-        for l in lines:
-            current_data.append((l.split(",")[0], l.split(",")[1], l.split(",")[2]))
+    file_path = Path("CountedVRU.csv")
+
+    # Check if it exists and is a file
+    if file_path.is_file():
+      with open("CountedVRU.csv", "r") as fr:
+          lines = fr.readlines()
+          for l in lines:
+              current_data.append((l.split(",")[0], l.split(",")[1], l.split(",")[2]))
     
     ts = time.time()
     current_data.append((datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S'), people, global_MACs))
