@@ -163,8 +163,6 @@ def on_message(client, userdata, msg):
         "interval_seconds": data.get("interval_seconds"),
         "language": args.language,
         "use_range": args.use_range,
-        "distance_m": None,
-        "proximity_alert": False,
         "sensor_lat": data.get("latitude"),
         "sensor_lon": data.get("longitude"),
         "timestamp": time.time()
@@ -790,12 +788,6 @@ HTML = r"""
     document.getElementById("interval").textContent =
       (d.interval_seconds !== undefined && d.interval_seconds !== null) ? (d.interval_seconds + " s") : "--";
     document.getElementById("device").textContent = d.device_id || "--";
-
-    if (d.distance_m !== undefined && d.distance_m !== null) {
-      document.getElementById("distance").textContent = d.distance_m >= 1000 ? (d.distance_m / 1000).toFixed(2) + " km" : d.distance_m + " m";
-    } else {
-      document.getElementById("distance").textContent = "--";
-    }
 
     // Show sign based on VRU detection level:
     // low -> pedestrian.png
