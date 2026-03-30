@@ -6,3 +6,4 @@ __pycache__/
 WiFi/
 
 VRUWarningSystem/ToMove_launch_command.sh
+PositioningProvider/run_mqtt_nav_sender_ToMove.sh
