@@ -12,6 +12,7 @@ from flask import Flask, render_template_string
 from flask_socketio import SocketIO
 import paho.mqtt.client as mqtt
 from pathlib import Path
+import math
 
 QUEUE_LENGHT = 500
 
@@ -26,6 +27,8 @@ parser.add_argument("--web-host", default="0.0.0.0", help="Web server host")
 parser.add_argument("--web-port", type=int, default=5000, help="Web server port")
 parser.add_argument("--use-range", type=int, default=0, help="Display an estimated range instead of a precise number. You should specify the +/- range after this option. If set to 0 a precise number will be displayed.")
 parser.add_argument("--language", default="EN", help="Display language. Can be either EN or IT.")
+parser.add_argument("--position-topic", default=None, help="MQTT topic that carries this system own GMSS position (JSON with latitude/longitude fields). When set, the distance to the VRU sensor is shown on the HMI. By default it is not set")
+parser.add_argument("--proximity-alert-m", type=int, default=100, help="Show a proximity danger icon on the HMI when the distance to the VRU sensor drops below a threshold (metres). Default: 100 m")
 
 args = parser.parse_args()
 
@@ -51,6 +54,16 @@ if args.use_range < 0:
   os._exit(1)
 
 last_payload = None
+own_position = None # Own GNSS position in the format {'latitude': float, 'longitude': float}; this is updated by the position topic when --position-topic is specified
+
+def haversine_m(lat1, lon1, lat2, lon2):
+    # Haversine distance formula considering WGS-84
+    R = 6_371_000  # Earth radius in metres
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlam = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
+    return 2 * R * math.asin(math.sqrt(a))
 
 # Theshold logic for displaying the warnings
 def determine_vru_level(diff: int):
@@ -93,7 +106,10 @@ def on_message(client, userdata, msg):
       with open("CountedVRU.csv", "r") as fr:
           lines = fr.readlines()
           for l in lines:
-              current_data.append((l.split(",")[0], l.split(",")[1], l.split(",")[2]))
+              parts = l.strip().split(",")
+              if len(parts) < 3 or parts[0] == "timestamp":  # skip header and malformed lines
+                  continue
+              current_data.append((parts[0], parts[1], parts[2]))
     
     ts = time.time()
     current_data.append((datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S'), people, global_MACs))
@@ -126,6 +142,14 @@ def on_message(client, userdata, msg):
         f"VRU_count={people}, VRU_presence_level={level}"
     )
 
+    curr_distance_m = None
+    if own_position is not None:
+        sensor_lat = data.get("latitude")
+        sensor_lon = data.get("longitude")
+        if sensor_lat is not None and sensor_lon is not None:
+            curr_distance_m = round(haversine_m(own_position["latitude"], own_position["longitude"],float(sensor_lat), float(sensor_lon)))
+            print(f"[MQTT] Distance to sensor: {curr_distance_m} m")
+
     # Prepare the data to be sent to the web-based HMI
     payload = {
         "device_id": data.get("device_id"),
@@ -138,7 +162,12 @@ def on_message(client, userdata, msg):
         "string_ts": string_ts,
         "interval_seconds": data.get("interval_seconds"),
         "language": args.language,
-        "use_range": args.use_range
+        "use_range": args.use_range,
+        "distance_m": curr_distance_m,
+        "proximity_alert": (curr_distance_m is not None and curr_distance_m < args.proximity_alert_m),
+        "sensor_lat": data.get("latitude"),
+        "sensor_lon": data.get("longitude"),
+        "timestamp": time.time()
     }
 
     print("[HMI] Sending update to web clients via SocketIO")
@@ -147,8 +176,44 @@ def on_message(client, userdata, msg):
     # Send data to HMI via socket.io
     socketio.emit("update", payload)
 
+# Callbacks for the position client
+def on_position_connect(client, userdata, flags, rc):
+    if rc == 0:
+        print("[MQTT][POS] Connected!")
+        client.subscribe(args.position_topic)
+        print(f"[MQTT][POS] Subscribed to position topic: {args.position_topic}")
+    else:
+        print(f"[MQTT][POS] Error: cannot connect to broker. Error code: {rc}")
 
-# MQTT client creation
+# Callback for the position client
+def on_position_message(client, userdata, msg):
+    try:
+        data = json.loads(msg.payload.decode())
+    except Exception as e:
+        print("[MQTT][POS] [ERROR] Invalid JSON format:", e)
+        return
+    lat = data.get("latitude")
+    lon = data.get("longitude")
+    if lat is not None and lon is not None:
+        global own_position
+        own_position = {"latitude": float(lat), "longitude": float(lon)}
+        print(f"[MQTT][POS] Own position updated: lat={lat}, lon={lon}")
+
+        # Recompute distance against the last known sensor position and push to HMI
+        if last_payload is not None and last_payload.get("sensor_lat") is not None:
+            distance_m = round(haversine_m(
+                own_position["latitude"], own_position["longitude"],
+                last_payload["sensor_lat"], last_payload["sensor_lon"]
+            ))
+            proximity_alert = distance_m < args.proximity_alert_m
+            print(f"[MQTT][POS] Updated distance: {distance_m} m (alert={proximity_alert})")
+            socketio.emit("position_update", {
+                "distance_m": distance_m,
+                "proximity_alert": proximity_alert,
+                "timestamp": time.time()
+            })
+
+# Main MQTT client creation
 mqtt_client = mqtt.Client()
 mqtt_client.username_pw_set(args.mqtt_username, args.mqtt_password)
 mqtt_client.on_connect = on_connect
@@ -158,6 +223,15 @@ mqtt_client.on_message = on_message
 def start_mqtt():
     mqtt_client.connect(args.mqtt_broker, args.mqtt_port, 60)
     mqtt_client.loop_start()
+
+    # Position MQTT client creation
+    if args.position_topic:
+      pos_client = mqtt.Client()
+      pos_client.username_pw_set(args.mqtt_username, args.mqtt_password)
+      pos_client.on_connect = on_position_connect
+      pos_client.on_message = on_position_message
+      pos_client.connect(args.mqtt_broker, args.mqtt_port, 60)
+      pos_client.loop_start()
 
 # Web-based HMI code -> embedded in the Python code for conveniency
 HTML = r"""
@@ -257,7 +331,7 @@ HTML = r"""
       border: 1px solid var(--border);
       background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.05));
       box-shadow: 0 24px 65px rgba(0,0,0,0.40);
-      overflow:hidden;
+      overflow:visible;
       position: relative;
     }
 
@@ -343,9 +417,10 @@ HTML = r"""
 
     .metaGrid{
       display:grid;
-      grid-template-columns: 2.2fr 0.8fr 1.2fr;
+      grid-template-columns: 1.6fr 0.8fr 1.0fr 1.0fr;
       gap: 10px;
       padding: 14px 18px 18px;
+      overflow: visible;
     }
 
     @media (max-width: 860px){
@@ -357,6 +432,13 @@ HTML = r"""
       border: 1px solid rgba(255,255,255,0.12);
       background: rgba(0,0,0,0.14);
       padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .metaGrid .card {
+      min-height: 72px;
     }
 
     .k{
@@ -458,6 +540,24 @@ HTML = r"""
     .theme-low  .dot{ background: var(--g); box-shadow: 0 0 0 4px rgba(34,197,94,0.18); }
     .theme-med  .dot{ background: var(--y); box-shadow: 0 0 0 4px rgba(245,158,11,0.18); }
     .theme-high .dot{ background: var(--r); box-shadow: 0 0 0 4px rgba(239,68,68,0.18); }
+
+    .proximityAlert {
+      display: none;
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 48px;
+      height: 48px;
+      object-fit: contain;
+      filter: drop-shadow(0 0 8px rgba(239,68,68,0.7));
+      animation: proximityPulse 1s ease-in-out infinite;
+      z-index: 10;
+    }
+
+    @keyframes proximityPulse {
+      0%, 100% { opacity: 1;   transform: scale(1);    }
+      50%       { opacity: 0.6; transform: scale(1.12); }
+    }
   </style>
 </head>
 
@@ -500,11 +600,22 @@ HTML = r"""
             <div class="k" id="lblDevice">Device</div>
             <div class="v" id="device">--</div>
           </div>
+          <div class="card" style="overflow: visible;">
+            <div class="k" id="lblDistance">Distance</div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div class="v" id="distance" style="overflow: visible; text-overflow: unset;">--</div>
+              <img id="imgProximity" src="/static/danger.png" alt="Proximity alert"
+                   style="display:none; flex-shrink:0; width:40px; height:40px; object-fit:contain;
+                          filter:drop-shadow(0 0 5px rgba(239,68,68,0.8));
+                          animation: proximityPulse 1s ease-in-out infinite;" />
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- Right panel: warning sign depending on the detected VRU presence level -->
       <div class="visualCard">
+      <img id="imgProximity" class="proximityAlert" src="/static/danger.png" alt="Proximity alert" />
       <!--<div class="visualTitle">Status</div>-->
 
       <div class="signRow">
@@ -542,6 +653,7 @@ HTML = r"""
       lblLastMeas: "Last measurement",
       lblInterval: "Interval",
       lblDevice: "Device",
+      lblDistance: "Ped. zone distance",
       status_wait: "Waiting for data...",
       status_connected: "Connected — waiting for MQTT…",
       status_disconnected: "Disconnected — retrying…",
@@ -558,6 +670,7 @@ HTML = r"""
       lblLastMeas: "Ultima misurazione",
       lblInterval: "Intervallo",
       lblDevice: "Dispositivo",
+      lblDistance: "Distanza zona ped.",
       status_wait: "In attesa dei dati...",
       status_connected: "Connesso - in attesa di MQTT…",
       status_disconnected: "Disconnesso - riconnessione in corso…",
@@ -583,7 +696,7 @@ HTML = r"""
     document.documentElement.lang = (currentLang === "IT") ? "it" : "en";
 
     // Update static labels
-    const keys = ["titleTxt","lblPresence","lblEstimated","lblLastMeas","lblInterval","lblDevice"];
+    const keys = ["titleTxt","lblPresence","lblEstimated","lblLastMeas","lblInterval","lblDevice","lblDistance"];
     for (const id of keys){
       const el = document.getElementById(id);
       if (el) {
@@ -610,6 +723,26 @@ HTML = r"""
     else if(level === "medium") panel.classList.add("theme-med");
     else panel.classList.add("theme-high");
   }
+
+  let lastPositionTs = null;
+
+  setInterval(() => {
+    if (lastPositionTs !== null && (Date.now() / 1000 - lastPositionTs) > 10) {
+      document.getElementById("distance").textContent = "--";
+      document.getElementById("imgProximity").style.display = "none";
+      lastPositionTs = null;
+    }
+  }, 1000);
+
+  socket.on("position_update", d => {
+    lastPositionTs = d.timestamp;
+    console.log("[HMI] position_update received:", d);
+    if (d.distance_m !== undefined && d.distance_m !== null) {
+      document.getElementById("distance").textContent =
+        d.distance_m >= 1000 ? (d.distance_m / 1000).toFixed(2) + " km" : d.distance_m + " m";
+    }
+    document.getElementById("imgProximity").style.display = d.proximity_alert ? "block" : "none";
+  });
 
   socket.on("connect", () => {
     console.log("[HMI] Socket connected", socket.id);
@@ -658,6 +791,13 @@ HTML = r"""
     document.getElementById("interval").textContent =
       (d.interval_seconds !== undefined && d.interval_seconds !== null) ? (d.interval_seconds + " s") : "--";
     document.getElementById("device").textContent = d.device_id || "--";
+    document.getElementById("imgProximity").style.display = d.proximity_alert ? "block" : "none";
+
+    if (d.distance_m !== undefined && d.distance_m !== null) {
+      document.getElementById("distance").textContent = d.distance_m >= 1000 ? (d.distance_m / 1000).toFixed(2) + " km" : d.distance_m + " m";
+    } else {
+      document.getElementById("distance").textContent = "--";
+    }
 
     // Show sign based on VRU detection level:
     // low -> pedestrian.png

@@ -7,3 +7,5 @@ WiFi/
 
 VRUWarningSystem/ToMove_launch_command.sh
 PositioningProvider/run_mqtt_nav_sender_ToMove.sh
+VRUWarningSystem/CountedVRU.csv
+VRUWarningSystem/ToMove_launch_command_dist.sh
