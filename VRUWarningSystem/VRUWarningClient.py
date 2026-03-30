@@ -165,6 +165,8 @@ def on_message(client, userdata, msg):
         "use_range": args.use_range,
         "distance_m": None,
         "proximity_alert": False,
+        "sensor_lat": data.get("latitude"),
+        "sensor_lon": data.get("longitude"),
         "timestamp": time.time()
     }
 
