@@ -615,7 +615,6 @@ HTML = r"""
 
       <!-- Right panel: warning sign depending on the detected VRU presence level -->
       <div class="visualCard">
-      <img id="imgProximity" class="proximityAlert" src="/static/danger.png" alt="Proximity alert" />
       <!--<div class="visualTitle">Status</div>-->
 
       <div class="signRow">
@@ -791,7 +790,11 @@ HTML = r"""
     document.getElementById("interval").textContent =
       (d.interval_seconds !== undefined && d.interval_seconds !== null) ? (d.interval_seconds + " s") : "--";
     document.getElementById("device").textContent = d.device_id || "--";
-    document.getElementById("imgProximity").style.display = d.proximity_alert ? "block" : "none";
+    const positionUpdated = lastPositionTs !== null && (Date.now() / 1000 - lastPositionTs) <= 10;
+    if (!positionUpdated) {
+      document.getElementById("distance").textContent = "--";
+      document.getElementById("imgProximity").style.display = "none";
+    }
 
     if (d.distance_m !== undefined && d.distance_m !== null) {
       document.getElementById("distance").textContent = d.distance_m >= 1000 ? (d.distance_m / 1000).toFixed(2) + " km" : d.distance_m + " m";
