@@ -163,10 +163,8 @@ def on_message(client, userdata, msg):
         "interval_seconds": data.get("interval_seconds"),
         "language": args.language,
         "use_range": args.use_range,
-        "distance_m": curr_distance_m,
-        "proximity_alert": (curr_distance_m is not None and curr_distance_m < args.proximity_alert_m),
-        "sensor_lat": data.get("latitude"),
-        "sensor_lon": data.get("longitude"),
+        "distance_m": None,
+        "proximity_alert": False,
         "timestamp": time.time()
     }
 
@@ -790,11 +788,6 @@ HTML = r"""
     document.getElementById("interval").textContent =
       (d.interval_seconds !== undefined && d.interval_seconds !== null) ? (d.interval_seconds + " s") : "--";
     document.getElementById("device").textContent = d.device_id || "--";
-    const positionUpdated = lastPositionTs !== null && (Date.now() / 1000 - lastPositionTs) <= 10;
-    if (!positionUpdated) {
-      document.getElementById("distance").textContent = "--";
-      document.getElementById("imgProximity").style.display = "none";
-    }
 
     if (d.distance_m !== undefined && d.distance_m !== null) {
       document.getElementById("distance").textContent = d.distance_m >= 1000 ? (d.distance_m / 1000).toFixed(2) + " km" : d.distance_m + " m";
