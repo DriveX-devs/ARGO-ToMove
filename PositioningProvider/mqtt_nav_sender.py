@@ -6,9 +6,18 @@ import logging
 import sys
 import time
 from datetime import datetime, timezone
+# This import is to let us run this code on older Python versions
+from typing import Optional
 
 import gps
 import paho.mqtt.client as mqtt
+
+# Patch for "gps" library issue with Python >3.9 (without this, the code will terminate with an error due to an unsupported "encoding" arg)
+_original_loads = json.loads
+def _patched_loads(s, *args, **kwargs):
+    kwargs.pop("encoding", None) # remove unsupported "encoding" arg
+    return _original_loads(s, *args, **kwargs)
+json.loads = _patched_loads
 
 DEFAULT_GPSD_HOST = "localhost"
 DEFAULT_GPSD_PORT = 2947 # Default gpsd port
@@ -61,30 +70,32 @@ def open_gpsd(host: str = DEFAULT_GPSD_HOST,
     session = gps.gps(host=host, port=port, mode=gps.WATCH_ENABLE | gps.WATCH_NEWSTYLE)
     return session
 
+# Function to get the latest positioning information from the GNSS receiver
+# The while loop flushes the gpsd buffer to get the latest TPV report
+def read_fix(session: gps.gps) -> Optional[dict]:
+    last_tpv = None
 
-def read_fix(session: gps.gps) -> dict | None:
-    # Poll gpsd for the most up to date PVT data
-    # Returns None if no usable fix is available yet
-    
-    try:
-        report = session.next()
-    except StopIteration:
-        print("gpsd stream ended unexpectedly.")
-        return None
+    while True:
+        try:
+            report = session.next()
+        except StopIteration:
+            print("gpsd stream ended unexpectedly.")
+            return None
 
-    if report["class"] != "TPV":
-        print
+        if report["class"] == "TPV":
+            last_tpv = report
 
-    # A fix requires at least a 2D mode
-    fix_mode = getattr(report, "mode", gps.MODE_NO_FIX)
+        if not session.waiting() and last_tpv is not None:
+            break
+
+    fix_mode = getattr(last_tpv,"mode",gps.MODE_NO_FIX)
+
     if fix_mode < gps.MODE_2D:
         return None
 
-    # Prefer the GPS timestamp - if not available, fallback to system time (UTC)
-    if hasattr(report, "time") and report.time:
+    if hasattr(last_tpv, "time") and last_tpv.time:
         try:
-            # gpsd returns an ISO-8601 string, e.g. "2024-06-01T12:34:56.000Z"
-            ts = datetime.fromisoformat(report.time.replace("Z", "+00:00"))
+            ts = datetime.fromisoformat(last_tpv.time.replace("Z", "+00:00"))
         except ValueError:
             ts = datetime.now(tz=timezone.utc)
     else:
@@ -92,12 +103,11 @@ def read_fix(session: gps.gps) -> dict | None:
 
     return {
         "timestamp": int(ts.timestamp()),
-        "latitude": getattr(report,"lat",float("nan")),
-        "longitude": getattr(report,"lon",float("nan")),
-        "speed": getattr(report,"speed",float("nan")),
-        "heading": getattr(report,"track",float("nan")),
+        "latitude": getattr(last_tpv, "lat",   float("nan")),
+        "longitude": getattr(last_tpv, "lon",   float("nan")),
+        "speed": getattr(last_tpv, "speed", float("nan")),
+        "heading": getattr(last_tpv, "track", float("nan")),
     }
-
 
 def run(args: argparse.Namespace) -> None:
     # MQTT client configuration
