@@ -117,8 +117,8 @@ All the authors are or were researchers or master thesis students at Politecnico
 - **Giuseppe Perrone** - *Researcher and PhD student* -
 - **Riccardo Rusca** - *Former Researcher and post-doc* -
 - **Francesco Raviglione** - *Researcher and assistant professor with time contract* -
-- **Alex Carluccio** - *Former master thesis student* -
 - **Marco Rapelli** - *Researcher and assistant professor with time contract* -
+- **Alex Carluccio** - *Former master thesis student* -
 
 ## License
 
