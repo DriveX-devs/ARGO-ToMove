@@ -44,7 +44,7 @@ The ARGO-ToMove framework, developed in Python, is designed to analyze wireless 
 
 ## Command line arguments
 
-The main `argo.py` code accepts several command-line argument to configure the behaviour of the system. They can be found in the code right after if "`__name__ == "__main__"`" and they can also be displayed when running `argo.py` with the `--help` option.
+The main `argo.py` code accepts several command-line argument to configure the behaviour of the system. They can be found in the code right after `if __name__ == "__main__"` and they can also be displayed when running `argo.py` with the `--help` option.
 
 ## A high-level overview of ARGO logic
 
@@ -75,7 +75,7 @@ Example usage with data transmission to both MQTT and a MySQL DB running on loca
 python argo.py --input_file ./example.pcap --db_ip 127.0.0.1 --db_port 6666 --db_user db_username --db_password db_password --db_name ToMove --db_table ARGO-ToMove --enable_db True --mqtt_addr 127.0.0.1:1883 --mqtt_pos 45:7 --mqtt_device_id name_of_counting_device --mqtt_topic peoplecounting-argo --mqtt_duration 60 --mqtt_credentials username#password --enable_mqtt True
 ```
 
-## Running ARGO-ToMove is a persistent way under Linux
+## Running ARGO-ToMove in a persistent way under Linux
 
 To run ARGO-ToMove in a persistent way to periodically gather people counting data, you should put your device Wi-Fi interface in monitor mode, and then you can rely on a bash script like the following. The script uses `tshark` as a way to get the input PCAPs for ARGO-ToMove.
 ```
@@ -111,13 +111,13 @@ exit 0
 
 ## Authors
 
-All the authors are or were researchers or master's students at the Politecnico di Torino, Italy.
+All the authors are or were researchers or master thesis students at Politecnico di Torino, Italy.
 
 - **Diego Gasco** - *Researcher and PhD candidate* -
 - **Giuseppe Perrone** - *Researcher and PhD candidate* -
 - **Riccardo Rusca** - *Former Researcher and post-doc* -
 - **Francesco Raviglione** - *Researcher and assistant professor with time contract* -
-- **Alex Carluccio** - *Former master's thesis student* -
+- **Alex Carluccio** - *Former master thesis student* -
 - **Marco Rapelli** - *Researcher and assistant professor with time contract* -
 
 ## License
